@@ -1,0 +1,202 @@
+<template>
+    <lightning-card title={programName} icon-name="standard:form">
+        <!-- Added slds-is-relative to properly contain the loading spinner -->
+        <div class="slds-p-around_medium slds-is-relative">
+
+            <!-- Loading State -->
+            <template if:true={isLoading}>
+                <lightning-spinner alternative-text="Loading form..." size="medium" variant="brand"></lightning-spinner>
+            </template>
+
+            <!-- Error State -->
+            <template if:true={errorMessage}>
+                <div class="slds-notify slds-notify_alert slds-alert_error slds-border_bottom slds-m-bottom_medium slds-border_radius"
+                    role="alert">
+                    <span class="slds-assistive-text">error</span>
+                    <lightning-icon icon-name="utility:error" variant="inverse" size="x-small"
+                        class="slds-m-right_x-small"></lightning-icon>
+                    <h2 class="slds-text-heading_small">{errorMessage}</h2>
+                </div>
+            </template>
+
+            <!-- Form Body -->
+            <template if:false={isLoading}>
+                <template if:true={pages.length}>
+                    <template for:each={pages} for:item="page">
+                        <template if:true={page.isVisible}>
+                            <div key={page.id} class={page.sectionClass}>
+
+                                <!-- Pure SLDS Accordion Header (LWR Compatible) -->
+                                <h3 class="slds-section__title">
+                                    <button type="button"
+                                        class="slds-button slds-section__title-action slds-p-vertical_x-small"
+                                        data-id={page.id} onclick={togglePageAccordion}>
+                                        <lightning-icon icon-name="utility:switch" size="x-small"
+                                            class="slds-section__title-action-icon slds-button__icon slds-button__icon_left slds-m-right_x-small">
+                                        </lightning-icon>
+                                        <span class="slds-truncate slds-text-title_caps slds-text-color_default"
+                                            title={page.name}>
+                                            <strong>{page.name}</strong>
+                                        </span>
+                                    </button>
+                                </h3>
+
+                                <!-- Page Sections Content -->
+                                <div class="slds-section__content slds-p-horizontal_small slds-p-bottom_medium">
+                                    <template for:each={page.sections} for:item="section">
+                                        <template if:true={section.isVisible}>
+                                            <div key={section.id} class="slds-m-bottom_large">
+
+                                                <!-- Section Header -->
+                                                <h4 class="slds-text-heading_small slds-m-top_medium slds-m-bottom_medium slds-p-bottom_xx-small slds-border_bottom slds-text-color_weak"
+                                                    style="font-weight: 600;">
+                                                    {section.label}
+                                                </h4>
+
+                                                <template if:true={section.richText}>
+                                                    <div
+                                                        class="slds-m-bottom_medium slds-text-color_weak slds-text-body_small slds-p-horizontal_xx-small">
+                                                        <lightning-formatted-rich-text
+                                                            value={section.richText}></lightning-formatted-rich-text>
+                                                    </div>
+                                                </template>
+
+                                                <!-- Grid Layout Engine -->
+                                                <div class="slds-grid slds-wrap slds-gutters">
+                                                    <template for:each={section.elements} for:item="elem">
+                                                        <template if:true={elem.isVisible}>
+                                                            <div key={elem.id} class={section.layoutClass}>
+                                                                <div class="slds-p-bottom_medium">
+
+                                                                    <!-- INFO / STATIC TEXT -->
+                                                                    <template if:true={elem.isInfo}>
+                                                                        <div
+                                                                            class="slds-box slds-theme_shade slds-m-vertical_xx-small slds-p-around_small">
+                                                                            <template if:true={elem.label}>
+                                                                                <strong
+                                                                                    class="slds-text-title_bold slds-m-bottom_xx-small slds-show">{elem.label}</strong>
+                                                                            </template>
+                                                                            <div class="slds-text-body_regular">
+                                                                                <lightning-formatted-rich-text
+                                                                                    value={elem.richText}></lightning-formatted-rich-text>
+                                                                            </div>
+                                                                        </div>
+                                                                    </template>
+
+                                                                    <!-- TEXT / ADDITIONAL Q -->
+                                                                    <template if:true={elem.isText}>
+                                                                        <lightning-input type="text" label={elem.label}
+                                                                            required={elem.required} data-id={elem.id}
+                                                                            onchange={handleChange} value={elem.value}>
+                                                                        </lightning-input>
+                                                                    </template>
+
+                                                                    <!-- TEXT AREA -->
+                                                                    <template if:true={elem.isTextArea}>
+                                                                        <lightning-textarea label={elem.label}
+                                                                            required={elem.required} data-id={elem.id}
+                                                                            onchange={handleChange} value={elem.value}>
+                                                                        </lightning-textarea>
+                                                                    </template>
+
+                                                                    <!-- PICKLIST -->
+                                                                    <template if:true={elem.isPicklist}>
+                                                                        <lightning-combobox label={elem.label}
+                                                                            required={elem.required}
+                                                                            options={elem.options} data-id={elem.id}
+                                                                            onchange={handleChange} value={elem.value}
+                                                                            placeholder="Select an option">
+                                                                        </lightning-combobox>
+                                                                    </template>
+
+                                                                    <!-- DATE -->
+                                                                    <template if:true={elem.isDate}>
+                                                                        <lightning-input type="date" label={elem.label}
+                                                                            required={elem.required} data-id={elem.id}
+                                                                            onchange={handleChange} value={elem.value}>
+                                                                        </lightning-input>
+                                                                    </template>
+
+                                                                    <!-- CHECKBOX -->
+                                                                    <template if:true={elem.isCheckbox}>
+                                                                        <div class="slds-p-top_x-small">
+                                                                            <lightning-input type="checkbox"
+                                                                                label={elem.label}
+                                                                                required={elem.required}
+                                                                                data-id={elem.id}
+                                                                                onchange={handleCheckboxChange}
+                                                                                checked={elem.value}>
+                                                                            </lightning-input>
+                                                                        </div>
+                                                                    </template>
+
+                                                                    <!-- INPUT HELP TEXT -->
+                                                                    <template if:true={elem.richText}>
+                                                                        <template if:false={elem.isInfo}>
+                                                                            <div
+                                                                                class="slds-text-color_weak slds-p-top_xx-small slds-text-body_small slds-p-left_xx-small">
+                                                                                <lightning-formatted-rich-text
+                                                                                    value={elem.richText}></lightning-formatted-rich-text>
+                                                                            </div>
+                                                                        </template>
+                                                                    </template>
+
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </template>
+
+                                    <!-- Page Controls (Footer) -->
+                                    <div class="slds-clearfix slds-p-top_medium slds-m-top_medium slds-border_top">
+                                        <!-- Used flex grid to vertically align text and buttons nicely -->
+                                        <div class="slds-float_right slds-grid slds-grid_vertical-align-center">
+                                            <template if:true={page.isDeadEnd}>
+                                                <lightning-icon icon-name="utility:ban" size="xx-small" variant="error"
+                                                    class="slds-m-right_xx-small"></lightning-icon>
+                                                <p
+                                                    class="slds-text-color_error slds-m-right_medium slds-text-title_bold">
+                                                    Form stopped based on your answers.
+                                                </p>
+                                            </template>
+
+                                            <template if:false={page.isDeadEnd}>
+                                                <template if:true={page.hasNextPage}>
+                                                    <lightning-button label="Next" variant="brand"
+                                                        icon-name="utility:chevronright" icon-position="right"
+                                                        data-index={page.index} onclick={handleNext}></lightning-button>
+                                                </template>
+                                                <template if:false={page.hasNextPage}>
+                                                    <lightning-button label="Submit Form" variant="success"
+                                                        icon-name="utility:check"
+                                                        onclick={handleSubmit}></lightning-button>
+                                                </template>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </template>
+                    </template>
+                </template>
+
+                <!-- Empty State -->
+                <template if:false={pages.length}>
+                    <div
+                        class="slds-illustration slds-illustration_small slds-p-around_xx-large slds-text-align_center">
+                        <lightning-icon icon-name="utility:setup_assistant_guide" size="large"
+                            class="slds-m-bottom_medium"></lightning-icon>
+                        <h3 class="slds-text-heading_medium slds-m-bottom_xx-small">No configuration found</h3>
+                        <p class="slds-text-body_regular slds-text-color_weak">There are no form pages or elements
+                            currently configured for this program.</p>
+                    </div>
+                </template>
+            </template>
+
+        </div>
+    </lightning-card>
+</template>

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RecordType xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Page</fullName>
+    <active>true</active>
+    <label>Page</label>
+    <picklistValues>
+        <picklist>FM_Data_Type__c</picklist>
+        <values>
+            <fullName>Additional Q</fullName>
+            <default>false</default>
+        </values>
+        <values>
+            <fullName>Checkbox</fullName>
+            <default>false</default>
+        </values>
+        <values>
+            <fullName>Date</fullName>
+            <default>false</default>
+        </values>
+        <values>
+            <fullName>File Upload</fullName>
+            <default>false</default>
+        </values>
+        <values>
+            <fullName>Info</fullName>
+            <default>false</default>
+        </values>
+        <values>
+            <fullName>Picklist</fullName>
+            <default>false</default>
+        </values>
+        <values>
+            <fullName>Section</fullName>
+            <default>true</default>
+        </values>
+        <values>
+            <fullName>Text</fullName>
+            <default>false</default>
+        </values>
+        <values>
+            <fullName>Text Area</fullName>
+            <default>false</default>
+        </values>
+    </picklistValues>
+    <picklistValues>
+        <picklist>Section_Layout__c</picklist>
+        <values>
+            <fullName>1 Column</fullName>
+            <default>false</default>
+        </values>
+        <values>
+            <fullName>2 Columns</fullName>
+            <default>false</default>
+        </values>
+    </picklistValues>
+</RecordType>
