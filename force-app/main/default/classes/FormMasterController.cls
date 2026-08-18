@@ -1,27 +1,12 @@
-/**
- * Metadata-driven dynamic form controller.
- *
- * Returns form metadata and handles synchronous public submissions.
- */
 public without sharing class FormMasterController {
-
     private static final Integer MAX_PAYLOAD_LENGTH = 100000;
     private static final Integer MAX_FORM_TITLE_LENGTH = 255;
     private static final Integer MAX_SUBMISSION_TOKEN_LENGTH = 80;
 
-    /*
-     * ============================================================
-     * FORM DEFINITION
-     * ============================================================
-     */
     @AuraEnabled(cacheable=true)
-    public static List<FormElement> getFormDefinition(
-        String programName
-    ) {
+    public static List<FormElement> getFormDefinition(String programName) {
         if (String.isBlank(programName)) {
-            throw new AuraHandledException(
-                'A program name is required.'
-            );
+            throw new AuraHandledException('A program name is required.');
         }
 
         List<Form_Master_Data__c> records = [
@@ -44,57 +29,28 @@ public without sharing class FormMasterController {
                 Page__r.Page_Name__c,
                 Page__r.Question__c,
                 Page__r.Order__c,
-
-                /*
-                 * Needed when a question's Page__c is blank
-                 * but the question belongs to a Section.
-                 */
                 Section__r.Page__c,
                 Section__r.Page__r.Name,
                 Section__r.Page__r.Page_Name__c,
                 Section__r.Page__r.Question__c,
                 Section__r.Page__r.Order__c
-
             FROM Form_Master_Data__c
             WHERE Program__r.Program_Name__c = :programName
-              AND RecordType.DeveloperName IN (
-                  'Form_Question',
-                  'Section'
-              )
+              AND RecordType.DeveloperName IN ('Form_Question', 'Section')
             WITH USER_MODE
-            ORDER BY
-                Page__r.Order__c NULLS FIRST,
-                Order__c NULLS LAST,
-                Name
+            ORDER BY Page__r.Order__c NULLS FIRST, Order__c NULLS LAST, Name
         ];
 
-        List<FormElement> elements =
-            new List<FormElement>();
+        List<FormElement> elements = new List<FormElement>();
 
-        for (
-            Form_Master_Data__c record :
-            records
-        ) {
-            elements.add(
-                new FormElement(record)
-            );
+        for (Form_Master_Data__c record : records) {
+            elements.add(new FormElement(record));
         }
 
-        /*
-         * IMPORTANT:
-         * This is the original working dead-end
-         * configuration model used by your renderer.
-         */
         flagDeadEnds(elements);
-
         return elements;
     }
 
-    /*
-     * ============================================================
-     * SUBMISSION
-     * ============================================================
-     */
     @AuraEnabled
     public static Id submitFormResponses(
         String programName,
@@ -112,29 +68,15 @@ public without sharing class FormMasterController {
             validateSubmissionAccess();
 
             Map<String, Object> responseMap =
-                parseResponsePayload(
-                    formResponsesJson
-                );
+                parseResponsePayload(formResponsesJson);
 
             Map<Id, Form_Master_Data__c> metadataById =
-                loadProgramMetadata(
-                    programName
-                );
+                loadProgramMetadata(programName);
 
-            validateQuestionIds(
-                responseMap,
-                metadataById
-            );
+            validateQuestionIds(responseMap, metadataById);
 
-            /*
-             * Use the same terminal configuration that
-             * the LWC receives.
-             */
             Decimal deadEndPageOrder =
-                findDeadEndPageOrder(
-                    responseMap,
-                    metadataById
-                );
+                findDeadEndPageOrder(responseMap, metadataById);
 
             validateReachableResponses(
                 responseMap,
@@ -148,69 +90,38 @@ public without sharing class FormMasterController {
                 deadEndPageOrder
             );
 
-            preventDuplicateSubmission(
-                submissionToken
+            preventDuplicateSubmission(submissionToken);
+
+            Form_Submission__c submission = new Form_Submission__c(
+                Form_Title__c = normalizeFormTitle(formTitle),
+                Status__c = 'Submitted',
+                Submitted_Date__c = System.now(),
+                Submission_Token__c = submissionToken
             );
-
-            Form_Submission__c submission =
-                new Form_Submission__c(
-                    Form_Title__c =
-                        normalizeFormTitle(
-                            formTitle
-                        ),
-
-                    Status__c =
-                        'Submitted',
-
-                    Submitted_Date__c =
-                        System.now(),
-
-                    Submission_Token__c =
-                        submissionToken
-                );
 
             Database.insert(
                 submission,
                 AccessLevel.SYSTEM_MODE
             );
 
-            List<Form_Answer__c> answers =
-                new List<Form_Answer__c>();
+            List<Form_Answer__c> answers = new List<Form_Answer__c>();
 
-            for (
-                String questionKey :
-                responseMap.keySet()
-            ) {
-                Id questionId =
-                    (Id)questionKey;
-
+            for (String questionKey : responseMap.keySet()) {
+                Id questionId = (Id)questionKey;
                 Form_Master_Data__c question =
-                    metadataById.get(
-                        questionId
-                    );
+                    metadataById.get(questionId);
 
-                Form_Answer__c answer =
+                answers.add(
                     new Form_Answer__c(
-                        Submission__c =
-                            submission.Id,
-
-                        Question_Identifier__c =
-                            String.valueOf(
-                                question.Id
-                            ),
-
-                        Question_Text__c =
-                            question.Question__c,
-
+                        Submission__c = submission.Id,
+                        Question_Identifier__c = String.valueOf(question.Id),
+                        Question_Text__c = question.Question__c,
                         Response_Value__c =
                             convertResponseToString(
-                                responseMap.get(
-                                    questionKey
-                                )
+                                responseMap.get(questionKey)
                             )
-                    );
-
-                answers.add(answer);
+                    )
+                );
             }
 
             if (!answers.isEmpty()) {
@@ -221,10 +132,8 @@ public without sharing class FormMasterController {
             }
 
             return submission.Id;
-
         } catch (AuraHandledException e) {
             throw e;
-
         } catch (Exception e) {
             throw new AuraHandledException(
                 'Unable to submit the form. Please try again.'
@@ -232,30 +141,20 @@ public without sharing class FormMasterController {
         }
     }
 
-    /*
-     * ============================================================
-     * REQUEST VALIDATION
-     * ============================================================
-     */
     private static void validateSubmissionRequest(
         String programName,
         String submissionToken,
         String formResponsesJson
     ) {
         if (String.isBlank(programName)) {
-            throw new AuraHandledException(
-                'A program name is required.'
-            );
+            throw new AuraHandledException('A program name is required.');
         }
 
         if (
             String.isBlank(submissionToken) ||
-            submissionToken.length() >
-                MAX_SUBMISSION_TOKEN_LENGTH
+            submissionToken.length() > MAX_SUBMISSION_TOKEN_LENGTH
         ) {
-            throw new AuraHandledException(
-                'Invalid submission.'
-            );
+            throw new AuraHandledException('Invalid submission.');
         }
 
         if (String.isBlank(formResponsesJson)) {
@@ -264,10 +163,7 @@ public without sharing class FormMasterController {
             );
         }
 
-        if (
-            formResponsesJson.length() >
-                MAX_PAYLOAD_LENGTH
-        ) {
+        if (formResponsesJson.length() > MAX_PAYLOAD_LENGTH) {
             throw new AuraHandledException(
                 'The submission is too large.'
             );
@@ -287,25 +183,18 @@ public without sharing class FormMasterController {
         if (
             !Schema.sObjectType.Form_Submission__c
                 .fields.Form_Title__c.isCreateable() ||
-
             !Schema.sObjectType.Form_Submission__c
                 .fields.Status__c.isCreateable() ||
-
             !Schema.sObjectType.Form_Submission__c
                 .fields.Submitted_Date__c.isCreateable() ||
-
             !Schema.sObjectType.Form_Submission__c
                 .fields.Submission_Token__c.isCreateable() ||
-
             !Schema.sObjectType.Form_Answer__c
                 .fields.Submission__c.isCreateable() ||
-
             !Schema.sObjectType.Form_Answer__c
                 .fields.Question_Identifier__c.isCreateable() ||
-
             !Schema.sObjectType.Form_Answer__c
                 .fields.Question_Text__c.isCreateable() ||
-
             !Schema.sObjectType.Form_Answer__c
                 .fields.Response_Value__c.isCreateable()
         ) {
@@ -315,23 +204,11 @@ public without sharing class FormMasterController {
         }
     }
 
-    /*
-     * ============================================================
-     * RESPONSE PARSING
-     * ============================================================
-     */
-    private static Map<String, Object> parseResponsePayload(
-        String json
-    ) {
+    private static Map<String, Object> parseResponsePayload(String json) {
         try {
-            Object parsed =
-                System.JSON.deserializeUntyped(
-                    json
-                );
+            Object parsed = System.JSON.deserializeUntyped(json);
 
-            if (
-                !(parsed instanceof Map<String, Object>)
-            ) {
+            if (!(parsed instanceof Map<String, Object>)) {
                 throw new AuraHandledException(
                     'Invalid submission format.'
                 );
@@ -349,38 +226,22 @@ public without sharing class FormMasterController {
             Map<String, Object> responseMap =
                 new Map<String, Object>();
 
-            for (
-                String key :
-                rawPayload.keySet()
-            ) {
-                Object rawValue =
-                    rawPayload.get(key);
+            for (String key : rawPayload.keySet()) {
+                Object rawValue = rawPayload.get(key);
 
-                if (
-                    rawValue instanceof
-                    Map<String, Object>
-                ) {
+                if (rawValue instanceof Map<String, Object>) {
                     Map<String, Object> wrapper =
                         (Map<String, Object>)rawValue;
 
-                    responseMap.put(
-                        key,
-                        wrapper.get('value')
-                    );
-
+                    responseMap.put(key, wrapper.get('value'));
                 } else {
-                    responseMap.put(
-                        key,
-                        rawValue
-                    );
+                    responseMap.put(key, rawValue);
                 }
             }
 
             return responseMap;
-
         } catch (AuraHandledException e) {
             throw e;
-
         } catch (Exception e) {
             throw new AuraHandledException(
                 'Invalid submission format.'
@@ -388,91 +249,58 @@ public without sharing class FormMasterController {
         }
     }
 
-    /*
-     * ============================================================
-     * METADATA LOAD
-     * ============================================================
-     */
-    private static Map<Id, Form_Master_Data__c>
-        loadProgramMetadata(
-            String programName
-        ) {
+    private static Map<Id, Form_Master_Data__c> loadProgramMetadata(
+        String programName
+    ) {
         Map<Id, Form_Master_Data__c> metadataById =
             new Map<Id, Form_Master_Data__c>();
 
-        for (
-            Form_Master_Data__c record :
-            [
-                SELECT
-                    Id,
-                    Name,
-                    Question__c,
-                    FM_Data_Type__c,
-                    Secondary_Text_Rich__c,
-                    Picklist_Values__c,
-                    Section__c,
-                    Section_Layout__c,
-                    Order__c,
-                    Is_Question_Mandatory__c,
-                    RecordType.DeveloperName,
-                    Parent_Question__c,
-                    Response_for_Additional_Question__c,
-                    Page__c,
-                    Page__r.Name,
-                    Page__r.Page_Name__c,
-                    Page__r.Question__c,
-                    Page__r.Order__c,
-
-                    Section__r.Page__c,
-                    Section__r.Page__r.Name,
-                    Section__r.Page__r.Page_Name__c,
-                    Section__r.Page__r.Question__c,
-                    Section__r.Page__r.Order__c
-
-                FROM Form_Master_Data__c
-                WHERE Program__r.Program_Name__c =
-                    :programName
-                  AND RecordType.DeveloperName IN (
-                      'Form_Question',
-                      'Section'
-                  )
-                WITH SYSTEM_MODE
-                ORDER BY
-                    Page__r.Order__c NULLS FIRST,
-                    Order__c NULLS LAST,
-                    Name
-            ]
-        ) {
-            metadataById.put(
-                record.Id,
-                record
-            );
+        for (Form_Master_Data__c record : [
+            SELECT
+                Id,
+                Name,
+                Question__c,
+                FM_Data_Type__c,
+                Secondary_Text_Rich__c,
+                Picklist_Values__c,
+                Section__c,
+                Section_Layout__c,
+                Order__c,
+                Is_Question_Mandatory__c,
+                RecordType.DeveloperName,
+                Parent_Question__c,
+                Response_for_Additional_Question__c,
+                Page__c,
+                Page__r.Name,
+                Page__r.Page_Name__c,
+                Page__r.Question__c,
+                Page__r.Order__c,
+                Section__r.Page__c,
+                Section__r.Page__r.Name,
+                Section__r.Page__r.Page_Name__c,
+                Section__r.Page__r.Question__c,
+                Section__r.Page__r.Order__c
+            FROM Form_Master_Data__c
+            WHERE Program__r.Program_Name__c = :programName
+              AND RecordType.DeveloperName IN ('Form_Question', 'Section')
+            WITH SYSTEM_MODE
+            ORDER BY Page__r.Order__c NULLS FIRST, Order__c NULLS LAST, Name
+        ]) {
+            metadataById.put(record.Id, record);
         }
 
         return metadataById;
     }
 
-    /*
-     * ============================================================
-     * QUESTION ID VALIDATION
-     * ============================================================
-     */
     private static void validateQuestionIds(
         Map<String, Object> responseMap,
         Map<Id, Form_Master_Data__c> metadataById
     ) {
-        for (
-            String key :
-            responseMap.keySet()
-        ) {
+        for (String key : responseMap.keySet()) {
             if (
                 !isValidSalesforceId(key) ||
-                !metadataById.containsKey(
-                    (Id)key
-                ) ||
-                metadataById.get(
-                    (Id)key
-                ).RecordType.DeveloperName !=
+                !metadataById.containsKey((Id)key) ||
+                metadataById.get((Id)key).RecordType.DeveloperName !=
                     'Form_Question'
             ) {
                 throw new AuraHandledException(
@@ -480,15 +308,9 @@ public without sharing class FormMasterController {
                 );
             }
 
-            /*
-             * A question is rendered through its Section.
-             * It does NOT need its own Page__c.
-             */
             if (
                 !isRenderableQuestion(
-                    metadataById.get(
-                        (Id)key
-                    ),
+                    metadataById.get((Id)key),
                     metadataById
                 )
             ) {
@@ -499,85 +321,36 @@ public without sharing class FormMasterController {
         }
     }
 
-    /*
-     * ============================================================
-     * RENDERABLE QUESTION
-     * ============================================================
-     *
-     * The renderer uses:
-     *
-     * Page
-     *   -> Section
-     *       -> Question
-     *
-     * Therefore a question is renderable when its Section
-     * exists in the returned metadata.
-     *
-     * Page__c on the QUESTION itself is not required.
-     */
     private static Boolean isRenderableQuestion(
         Form_Master_Data__c question,
         Map<Id, Form_Master_Data__c> metadataById
     ) {
         if (
             question == null ||
-            question.RecordType.DeveloperName !=
-                'Form_Question'
-        ) {
-            return false;
-        }
-
-        if (
+            question.RecordType.DeveloperName != 'Form_Question' ||
             question.Section__c == null
         ) {
             return false;
         }
 
         Form_Master_Data__c section =
-            metadataById.get(
-                question.Section__c
-            );
+            metadataById.get(question.Section__c);
 
-        return (
-            section != null &&
-            section.RecordType.DeveloperName ==
-                'Section'
-        );
+        return section != null &&
+            section.RecordType.DeveloperName == 'Section';
     }
 
-    /*
-     * ============================================================
-     * DEAD-END CONFIGURATION
-     * ============================================================
-     *
-     * THIS IS THE ORIGINAL WORKING RULE.
-     *
-     * For the same:
-     *
-     *   Parent Question
-     *   +
-     *   Response / showWhen
-     *
-     * if exactly one child exists and it is Info,
-     * that Info is terminal.
-     */
     private static void flagDeadEnds(
         List<FormElement> elements
     ) {
-        Map<String, List<FormElement>>
-            byBranch =
-                new Map<String, List<FormElement>>();
+        Map<String, List<FormElement>> byBranch =
+            new Map<String, List<FormElement>>();
 
-        for (
-            FormElement element :
-            elements
-        ) {
+        for (FormElement element : elements) {
             element.terminal = false;
 
             if (
-                String.isBlank(
-                    element.parentId
-                ) ||
+                String.isBlank(element.parentId) ||
                 element.dataType == 'Section'
             ) {
                 continue;
@@ -593,24 +366,17 @@ public without sharing class FormMasterController {
                     ','
                 );
 
-            if (
-                !byBranch.containsKey(key)
-            ) {
+            if (!byBranch.containsKey(key)) {
                 byBranch.put(
                     key,
                     new List<FormElement>()
                 );
             }
 
-            byBranch
-                .get(key)
-                .add(element);
+            byBranch.get(key).add(element);
         }
 
-        for (
-            List<FormElement> branch :
-            byBranch.values()
-        ) {
+        for (List<FormElement> branch : byBranch.values()) {
             if (
                 branch.size() == 1 &&
                 branch[0].dataType == 'Info'
@@ -620,11 +386,6 @@ public without sharing class FormMasterController {
         }
     }
 
-    /*
-     * ============================================================
-     * DEAD-END PAGE DISCOVERY
-     * ============================================================
-     */
     private static Decimal findDeadEndPageOrder(
         Map<String, Object> responseMap,
         Map<Id, Form_Master_Data__c> metadataById
@@ -632,50 +393,29 @@ public without sharing class FormMasterController {
         List<FormElement> elements =
             new List<FormElement>();
 
-        for (
-            Form_Master_Data__c record :
-            metadataById.values()
-        ) {
-            elements.add(
-                new FormElement(record)
-            );
+        for (Form_Master_Data__c record : metadataById.values()) {
+            elements.add(new FormElement(record));
         }
 
-        /*
-         * Same terminal configuration sent to the LWC.
-         */
         flagDeadEnds(elements);
 
         Decimal firstDeadEndPageOrder;
 
-        for (
-            FormElement element :
-            elements
-        ) {
-            if (
-                element.terminal != true
-            ) {
+        for (FormElement element : elements) {
+            if (element.terminal != true) {
                 continue;
             }
 
             Form_Master_Data__c record =
-                metadataById.get(
-                    (Id)element.id
-                );
+                metadataById.get((Id)element.id);
 
             if (
                 record == null ||
-                !isRenderableQuestion(
-                    record,
-                    metadataById
-                )
+                !isRenderableQuestion(record, metadataById)
             ) {
                 continue;
             }
 
-            /*
-             * This terminal branch must actually be selected.
-             */
             if (
                 !isRecordVisible(
                     record,
@@ -688,81 +428,50 @@ public without sharing class FormMasterController {
             }
 
             Decimal pageOrder =
-                getPageOrder(
-                    record,
-                    metadataById
-                );
+                getPageOrder(record, metadataById);
 
             if (
                 firstDeadEndPageOrder == null ||
-                pageOrder <
-                    firstDeadEndPageOrder
+                pageOrder < firstDeadEndPageOrder
             ) {
-                firstDeadEndPageOrder =
-                    pageOrder;
+                firstDeadEndPageOrder = pageOrder;
             }
         }
 
         return firstDeadEndPageOrder;
     }
 
-    /*
-     * ============================================================
-     * REACHABLE RESPONSE VALIDATION
-     * ============================================================
-     */
     private static void validateReachableResponses(
         Map<String, Object> responseMap,
         Map<Id, Form_Master_Data__c> metadataById,
         Decimal deadEndPageOrder
     ) {
-        for (
-            String key :
-            responseMap.keySet()
-        ) {
+        for (String key : responseMap.keySet()) {
             Form_Master_Data__c question =
-                metadataById.get(
-                    (Id)key
-                );
+                metadataById.get((Id)key);
 
             if (question == null) {
                 continue;
             }
 
-            if (
-                !isRenderableQuestion(
-                    question,
-                    metadataById
-                )
-            ) {
+            if (!isRenderableQuestion(question, metadataById)) {
                 throw new AuraHandledException(
                     'The submission contains a question that is not part of the rendered form.'
                 );
             }
 
             Decimal questionPageOrder =
-                getPageOrder(
-                    question,
-                    metadataById
-                );
+                getPageOrder(question, metadataById);
 
-            /*
-             * Responses from pages after a dead end
-             * are unreachable.
-             */
             if (
                 deadEndPageOrder != null &&
-                questionPageOrder >
-                    deadEndPageOrder
+                questionPageOrder > deadEndPageOrder
             ) {
                 throw new AuraHandledException(
                     'The submission contains a response from an unreachable section of the form.'
                 );
             }
 
-            /*
-             * Re-evaluate visibility server-side.
-             */
             if (
                 !isRecordVisible(
                     question,
@@ -783,65 +492,33 @@ public without sharing class FormMasterController {
         }
     }
 
-    /*
-     * ============================================================
-     * REQUIRED QUESTIONS
-     * ============================================================
-     */
     private static void validateRequiredQuestions(
         Map<String, Object> responseMap,
         Map<Id, Form_Master_Data__c> metadataById,
         Decimal deadEndPageOrder
     ) {
-        for (
-            Form_Master_Data__c question :
-            metadataById.values()
-        ) {
-            /*
-             * Only validate questions that the renderer
-             * can actually render.
-             */
-            if (
-                !isRenderableQuestion(
-                    question,
-                    metadataById
-                )
-            ) {
+        for (Form_Master_Data__c question : metadataById.values()) {
+            if (!isRenderableQuestion(question, metadataById)) {
                 continue;
             }
 
             if (
-                question.Is_Question_Mandatory__c !=
-                    true ||
-
-                question.FM_Data_Type__c ==
-                    'Info'
+                question.Is_Question_Mandatory__c != true ||
+                question.FM_Data_Type__c == 'Info'
             ) {
                 continue;
             }
 
             Decimal questionPageOrder =
-                getPageOrder(
-                    question,
-                    metadataById
-                );
+                getPageOrder(question, metadataById);
 
-            /*
-             * Required questions after the dead-end
-             * are unreachable.
-             */
             if (
                 deadEndPageOrder != null &&
-                questionPageOrder >
-                    deadEndPageOrder
+                questionPageOrder > deadEndPageOrder
             ) {
                 continue;
             }
 
-            /*
-             * Conditional required questions only apply
-             * when their branch is actually visible.
-             */
             if (
                 !isRecordVisible(
                     question,
@@ -854,22 +531,11 @@ public without sharing class FormMasterController {
             }
 
             Object answerValue =
-                responseMap.get(
-                    String.valueOf(
-                        question.Id
-                    )
-                );
+                responseMap.get(String.valueOf(question.Id));
 
-            if (
-                !hasMeaningfulValue(
-                    question,
-                    answerValue
-                )
-            ) {
+            if (!hasMeaningfulValue(question, answerValue)) {
                 String questionLabel =
-                    String.isNotBlank(
-                        question.Question__c
-                    )
+                    String.isNotBlank(question.Question__c)
                         ? question.Question__c
                         : question.Name;
 
@@ -881,11 +547,6 @@ public without sharing class FormMasterController {
         }
     }
 
-    /*
-     * ============================================================
-     * VISIBILITY
-     * ============================================================
-     */
     private static Boolean isRecordVisible(
         Form_Master_Data__c record,
         Map<String, Object> responseMap,
@@ -896,37 +557,19 @@ public without sharing class FormMasterController {
             return false;
         }
 
-        if (
-            visited.contains(
-                record.Id
-            )
-        ) {
+        if (visited.contains(record.Id)) {
             throw new AuraHandledException(
                 'Invalid form configuration: circular conditional logic.'
             );
         }
 
-        Set<Id> currentVisited =
-            new Set<Id>();
+        Set<Id> currentVisited = new Set<Id>();
+        currentVisited.addAll(visited);
+        currentVisited.add(record.Id);
 
-        currentVisited.addAll(
-            visited
-        );
-
-        currentVisited.add(
-            record.Id
-        );
-
-        /*
-         * Section visibility first.
-         */
-        if (
-            record.Section__c != null
-        ) {
+        if (record.Section__c != null) {
             Form_Master_Data__c section =
-                metadataById.get(
-                    record.Section__c
-                );
+                metadataById.get(record.Section__c);
 
             if (
                 section != null &&
@@ -955,42 +598,26 @@ public without sharing class FormMasterController {
         Map<Id, Form_Master_Data__c> metadataById,
         Set<Id> visited
     ) {
-        if (
-            record.Parent_Question__c ==
-                null
-        ) {
+        if (record.Parent_Question__c == null) {
             return true;
         }
 
         Form_Master_Data__c parent =
-            metadataById.get(
-                record.Parent_Question__c
-            );
+            metadataById.get(record.Parent_Question__c);
 
         if (parent == null) {
             return false;
         }
 
-        if (
-            visited.contains(
-                parent.Id
-            )
-        ) {
+        if (visited.contains(parent.Id)) {
             throw new AuraHandledException(
                 'Invalid form configuration: circular conditional logic.'
             );
         }
 
-        Set<Id> parentVisited =
-            new Set<Id>();
+        Set<Id> parentVisited = new Set<Id>();
+        parentVisited.addAll(visited);
 
-        parentVisited.addAll(
-            visited
-        );
-
-        /*
-         * Parent must itself be visible.
-         */
         if (
             !isRecordVisible(
                 parent,
@@ -1003,50 +630,26 @@ public without sharing class FormMasterController {
         }
 
         Object parentValue =
-            responseMap.get(
-                String.valueOf(
-                    parent.Id
-                )
-            );
+            responseMap.get(String.valueOf(parent.Id));
 
         if (parentValue == null) {
             return false;
         }
 
         String normalizedParentValue =
-            String.valueOf(
-                parentValue
-            )
+            String.valueOf(parentValue)
                 .trim()
                 .toLowerCase();
 
-        if (
-            String.isBlank(
-                normalizedParentValue
-            )
-        ) {
+        if (String.isBlank(normalizedParentValue)) {
             return false;
         }
 
-        /*
-         * Preserve the same response-matching behavior
-         * as the existing renderer.
-         */
-        List<String> parentValues =
-            new List<String>();
+        List<String> parentValues = new List<String>();
 
-        for (
-            String value :
-            normalizedParentValue.split(';')
-        ) {
-            if (
-                String.isNotBlank(
-                    value
-                )
-            ) {
-                parentValues.add(
-                    value.trim()
-                );
+        for (String value : normalizedParentValue.split(';')) {
+            if (String.isNotBlank(value)) {
+                parentValues.add(value.trim());
             }
         }
 
@@ -1056,11 +659,7 @@ public without sharing class FormMasterController {
                 record.Response_for_Additional_Question__c
             )
         ) {
-            if (
-                parentValues.contains(
-                    expectedResponse
-                )
-            ) {
+            if (parentValues.contains(expectedResponse)) {
                 return true;
             }
         }
@@ -1068,11 +667,6 @@ public without sharing class FormMasterController {
         return false;
     }
 
-    /*
-     * ============================================================
-     * RESPONSE VALUE VALIDATION
-     * ============================================================
-     */
     private static void validateResponseValue(
         Form_Master_Data__c question,
         Object value
@@ -1081,12 +675,9 @@ public without sharing class FormMasterController {
             return;
         }
 
-        String dataType =
-            question.FM_Data_Type__c;
+        String dataType = question.FM_Data_Type__c;
 
-        if (
-            dataType == 'Checkbox'
-        ) {
+        if (dataType == 'Checkbox') {
             if (
                 !(value instanceof Boolean) &&
                 !(value instanceof String)
@@ -1095,37 +686,22 @@ public without sharing class FormMasterController {
                     'Invalid checkbox response.'
                 );
             }
-
             return;
         }
 
-        if (
-            dataType == 'Date'
-        ) {
+        if (dataType == 'Date') {
             try {
-                Date.valueOf(
-                    String.valueOf(
-                        value
-                    )
-                );
-
+                Date.valueOf(String.valueOf(value));
             } catch (Exception e) {
                 throw new AuraHandledException(
                     'Invalid date response.'
                 );
             }
-
             return;
         }
 
-        if (
-            dataType == 'Picklist'
-        ) {
-            validatePicklistValue(
-                question,
-                value
-            );
-
+        if (dataType == 'Picklist') {
+            validatePicklistValue(question, value);
             return;
         }
 
@@ -1135,10 +711,8 @@ public without sharing class FormMasterController {
             dataType == 'Additional Q'
         ) {
             if (
-                value instanceof
-                    Map<String, Object> ||
-                value instanceof
-                    List<Object>
+                value instanceof Map<String, Object> ||
+                value instanceof List<Object>
             ) {
                 throw new AuraHandledException(
                     'Invalid text response.'
@@ -1151,49 +725,27 @@ public without sharing class FormMasterController {
         Form_Master_Data__c question,
         Object rawValue
     ) {
-        if (
-            String.isBlank(
-                question.Picklist_Values__c
-            )
-        ) {
+        if (String.isBlank(question.Picklist_Values__c)) {
             throw new AuraHandledException(
                 'A picklist is not configured correctly.'
             );
         }
 
-        Set<String> validValues =
-            new Set<String>();
+        Set<String> validValues = new Set<String>();
 
         String text =
             question.Picklist_Values__c
-                .replaceAll(
-                    '\n',
-                    ';'
-                )
-                .replaceAll(
-                    '\r',
-                    ''
-                );
+                .replaceAll('\n', ';')
+                .replaceAll('\r', '');
 
-        for (
-            String part :
-            text.split(';')
-        ) {
-            String trimmed =
-                part.trim();
+        for (String part : text.split(';')) {
+            String trimmed = part.trim();
 
-            if (
-                String.isBlank(
-                    trimmed
-                )
-            ) {
+            if (String.isBlank(trimmed)) {
                 continue;
             }
 
-            List<String> pieces =
-                trimmed.split(
-                    '\\|'
-                );
+            List<String> pieces = trimmed.split('\\|');
 
             validValues.add(
                 pieces.size() > 1
@@ -1202,24 +754,13 @@ public without sharing class FormMasterController {
             );
         }
 
-        if (
-            !validValues.contains(
-                String.valueOf(
-                    rawValue
-                )
-            )
-        ) {
+        if (!validValues.contains(String.valueOf(rawValue))) {
             throw new AuraHandledException(
                 'An invalid picklist value was submitted.'
             );
         }
     }
 
-    /*
-     * ============================================================
-     * REQUIRED VALUE
-     * ============================================================
-     */
     private static Boolean hasMeaningfulValue(
         Form_Master_Data__c question,
         Object value
@@ -1229,31 +770,18 @@ public without sharing class FormMasterController {
         }
 
         if (value instanceof String) {
-            return String.isNotBlank(
-                (String)value
-            );
+            return String.isNotBlank((String)value);
         }
 
-        if (
-            question.FM_Data_Type__c ==
-                'Checkbox'
-        ) {
-            if (
-                value instanceof Boolean
-            ) {
+        if (question.FM_Data_Type__c == 'Checkbox') {
+            if (value instanceof Boolean) {
                 return (Boolean)value;
             }
 
-            if (
-                value instanceof String
-            ) {
-                return
-                    String.valueOf(
-                        value
-                    )
+            if (value instanceof String) {
+                return String.valueOf(value)
                     .trim()
-                    .toLowerCase() ==
-                    'true';
+                    .toLowerCase() == 'true';
             }
 
             return false;
@@ -1262,16 +790,6 @@ public without sharing class FormMasterController {
         return true;
     }
 
-    /*
-     * ============================================================
-     * PAGE ORDER
-     * ============================================================
-     *
-     * A question can get its page from:
-     *
-     *   1. its own Page__c
-     *   2. its Section's Page__c
-     */
     private static Decimal getPageOrder(
         Form_Master_Data__c record,
         Map<Id, Form_Master_Data__c> metadataById
@@ -1280,9 +798,6 @@ public without sharing class FormMasterController {
             return 0;
         }
 
-        /*
-         * Direct page on the record.
-         */
         if (
             record.Page__r != null &&
             record.Page__r.Order__c != null
@@ -1290,20 +805,12 @@ public without sharing class FormMasterController {
             return record.Page__r.Order__c;
         }
 
-        /*
-         * For questions whose Page__c is blank,
-         * resolve Page through their Section.
-         */
         if (
             record.Section__c != null &&
-            metadataById.containsKey(
-                record.Section__c
-            )
+            metadataById.containsKey(record.Section__c)
         ) {
             Form_Master_Data__c section =
-                metadataById.get(
-                    record.Section__c
-                );
+                metadataById.get(record.Section__c);
 
             if (
                 section.Page__r != null &&
@@ -1316,11 +823,6 @@ public without sharing class FormMasterController {
         return 0;
     }
 
-    /*
-     * ============================================================
-     * DUPLICATE SUBMISSION
-     * ============================================================
-     */
     private static void preventDuplicateSubmission(
         String submissionToken
     ) {
@@ -1328,8 +830,7 @@ public without sharing class FormMasterController {
             ![
                 SELECT Id
                 FROM Form_Submission__c
-                WHERE Submission_Token__c =
-                    :submissionToken
+                WHERE Submission_Token__c = :submissionToken
                 LIMIT 1
             ].isEmpty()
         ) {
@@ -1339,127 +840,65 @@ public without sharing class FormMasterController {
         }
     }
 
-    /*
-     * ============================================================
-     * ID VALIDATION
-     * ============================================================
-     */
-    private static Boolean isValidSalesforceId(
-        String value
-    ) {
+    private static Boolean isValidSalesforceId(String value) {
         if (
             String.isBlank(value) ||
-            (
-                value.length() != 15 &&
-                value.length() != 18
-            )
+            (value.length() != 15 && value.length() != 18)
         ) {
             return false;
         }
 
         try {
-            Id convertedId =
-                (Id)value;
-
+            Id convertedId = (Id)value;
             return convertedId != null;
-
         } catch (Exception e) {
             return false;
         }
     }
 
-    /*
-     * ============================================================
-     * RESPONSE STORAGE
-     * ============================================================
-     */
-    private static String convertResponseToString(
-        Object value
-    ) {
+    private static String convertResponseToString(Object value) {
         if (value == null) {
             return null;
         }
 
         if (
-            value instanceof
-                List<Object> ||
-            value instanceof
-                Map<String, Object>
+            value instanceof List<Object> ||
+            value instanceof Map<String, Object>
         ) {
-            return JSON.serialize(
-                value
-            );
+            return JSON.serialize(value);
         }
 
-        return String.valueOf(
-            value
-        );
+        return String.valueOf(value);
     }
 
-    private static String normalizeFormTitle(
-        String title
-    ) {
-        if (
-            String.isBlank(title)
-        ) {
+    private static String normalizeFormTitle(String title) {
+        if (String.isBlank(title)) {
             return 'Untitled Form';
         }
 
-        title =
-            title.trim();
+        title = title.trim();
 
-        return
-            title.length() <=
-                MAX_FORM_TITLE_LENGTH
-                ? title
-                : title.substring(
-                    0,
-                    MAX_FORM_TITLE_LENGTH
-                );
+        return title.length() <= MAX_FORM_TITLE_LENGTH
+            ? title
+            : title.substring(0, MAX_FORM_TITLE_LENGTH);
     }
 
-    /*
-     * ============================================================
-     * RESPONSE CONFIGURATION
-     * ============================================================
-     */
-    private static List<String> splitResponses(
-        String raw
-    ) {
-        List<String> responses =
-            new List<String>();
+    private static List<String> splitResponses(String raw) {
+        List<String> responses = new List<String>();
 
-        if (
-            String.isBlank(raw)
-        ) {
+        if (String.isBlank(raw)) {
             return responses;
         }
 
-        for (
-            String part :
-            raw.split(';')
-        ) {
-            if (
-                String.isNotBlank(
-                    part
-                )
-            ) {
-                responses.add(
-                    part
-                        .trim()
-                        .toLowerCase()
-                );
+        for (String part : raw.split(';')) {
+            if (String.isNotBlank(part)) {
+                responses.add(part.trim().toLowerCase());
             }
         }
 
         return responses;
     }
 
-    /*
-     * ============================================================
-     * DTO
-     * ============================================================
-     */
     public class FormElement {
         @AuraEnabled public String id;
         @AuraEnabled public String name;
@@ -1478,131 +917,78 @@ public without sharing class FormMasterController {
         @AuraEnabled public Boolean terminal;
         @AuraEnabled public List<Choice> choices;
 
-        public FormElement(
-            Form_Master_Data__c record
-        ) {
-            this.id =
-                String.valueOf(
-                    record.Id
-                );
+        public FormElement(Form_Master_Data__c record) {
+            id = String.valueOf(record.Id);
+            name = record.Name;
 
-            this.name =
-                record.Name;
-
-            this.dataType =
-                record.RecordType.DeveloperName ==
-                    'Section'
+            dataType =
+                record.RecordType.DeveloperName == 'Section'
                     ? 'Section'
                     : record.FM_Data_Type__c;
 
-            this.sectionId =
-                record.Section__c;
+            sectionId = record.Section__c;
+            layout = record.Section_Layout__c;
+            sortOrder = record.Order__c;
+            pageId = record.Page__c;
+            parentId = record.Parent_Question__c;
 
-            this.layout =
-                record.Section_Layout__c;
-
-            this.sortOrder =
-                record.Order__c;
-
-            this.pageId =
-                record.Page__c;
-
-            /*
-             * Preserve your existing page resolution.
-             */
-            if (
-                record.Page__c != null
-            ) {
-                if (
-                    String.isNotBlank(
-                        record.Page__r.Page_Name__c
-                    )
-                ) {
-                    this.pageName =
-                        record.Page__r.Page_Name__c;
-
-                } else if (
-                    String.isNotBlank(
-                        record.Page__r.Question__c
-                    )
-                ) {
-                    this.pageName =
-                        record.Page__r.Question__c;
-
+            if (record.Page__c != null) {
+                if (String.isNotBlank(record.Page__r.Page_Name__c)) {
+                    pageName = record.Page__r.Page_Name__c;
+                } else if (String.isNotBlank(record.Page__r.Question__c)) {
+                    pageName = record.Page__r.Question__c;
                 } else {
-                    this.pageName =
-                        record.Page__r.Name;
+                    pageName = record.Page__r.Name;
                 }
 
-                this.pageOrder =
-                    record.Page__r.Order__c;
-
+                pageOrder = record.Page__r.Order__c;
             } else if (
                 record.Section__r != null &&
                 record.Section__r.Page__r != null
             ) {
-                /*
-                 * Resolve page through Section for questions
-                 * where Page__c is not populated directly.
-                 */
                 if (
                     String.isNotBlank(
                         record.Section__r.Page__r.Page_Name__c
                     )
                 ) {
-                    this.pageName =
+                    pageName =
                         record.Section__r.Page__r.Page_Name__c;
-
                 } else if (
                     String.isNotBlank(
                         record.Section__r.Page__r.Question__c
                     )
                 ) {
-                    this.pageName =
+                    pageName =
                         record.Section__r.Page__r.Question__c;
-
                 } else {
-                    this.pageName =
+                    pageName =
                         record.Section__r.Page__r.Name;
                 }
 
-                this.pageOrder =
+                pageOrder =
                     record.Section__r.Page__r.Order__c;
             }
 
-            this.parentId =
-                record.Parent_Question__c;
-
-            this.showWhen =
+            showWhen =
                 splitResponses(
                     record.Response_for_Additional_Question__c
                 );
 
-            this.required =
-                record.Is_Question_Mandatory__c ==
-                    true;
+            required =
+                record.Is_Question_Mandatory__c == true;
 
-            /*
-             * Dead-end configuration is assigned
-             * by flagDeadEnds().
-             */
-            this.terminal =
-                false;
+            terminal = false;
 
-            this.label =
+            label =
                 record.Question__c == null
                     ? ''
                     : record.Question__c.trim();
 
-            this.richText =
-                record.Secondary_Text_Rich__c;
+            richText = record.Secondary_Text_Rich__c;
 
-            this.choices =
-                record.FM_Data_Type__c ==
-                    'Picklist'
-                    ? parseChoices(
-                        record.Picklist_Values__c
-                    )
+            choices =
+                record.FM_Data_Type__c == 'Picklist'
+                    ? parseChoices(record.Picklist_Values__c)
                     : new List<Choice>();
         }
     }
@@ -1611,64 +997,33 @@ public without sharing class FormMasterController {
         @AuraEnabled public String label;
         @AuraEnabled public String value;
 
-        public Choice(
-            String label,
-            String value
-        ) {
+        public Choice(String label, String value) {
             this.label = label;
             this.value = value;
         }
     }
 
-    /*
-     * ============================================================
-     * PICKLIST PARSING
-     * ============================================================
-     */
-    private static List<Choice> parseChoices(
-        String rawChoices
-    ) {
-        List<Choice> choices =
-            new List<Choice>();
+    private static List<Choice> parseChoices(String rawChoices) {
+        List<Choice> choices = new List<Choice>();
 
-        if (
-            String.isBlank(
-                rawChoices
-            )
-        ) {
+        if (String.isBlank(rawChoices)) {
             return choices;
         }
 
         String text =
             rawChoices
-                .replaceAll(
-                    '\n',
-                    ';'
-                )
-                .replaceAll(
-                    '\r',
-                    ''
-                );
+                .replaceAll('\n', ';')
+                .replaceAll('\r', '');
 
-        for (
-            String part :
-            text.split(';')
-        ) {
-            String trimmed =
-                part.trim();
+        for (String part : text.split(';')) {
+            String trimmed = part.trim();
 
-            if (
-                String.isBlank(
-                    trimmed
-                )
-            ) {
+            if (String.isBlank(trimmed)) {
                 continue;
             }
 
             List<String> labelValue =
-                trimmed.split(
-                    '\\|'
-                );
+                trimmed.split('\\|');
 
             String label =
                 labelValue[0].trim();
@@ -1678,16 +1033,9 @@ public without sharing class FormMasterController {
                     ? labelValue[1].trim()
                     : label;
 
-            if (
-                String.isNotBlank(
-                    label
-                )
-            ) {
+            if (String.isNotBlank(label)) {
                 choices.add(
-                    new Choice(
-                        label,
-                        value
-                    )
+                    new Choice(label, value)
                 );
             }
         }

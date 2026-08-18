@@ -3,27 +3,39 @@
         <header class="app-header">
             <div class="header-container slds-grid slds-grid_vertical-align-center">
                 <div class="header-icon-wrapper">
-                    <lightning-icon icon-name="custom:custom18" size="medium"></lightning-icon>
+                    <lightning-icon icon-name="custom:custom18" size="medium">
+                    </lightning-icon>
                 </div>
-                <h1 class="program-title">{programName}</h1>
+
+                <h1 class="program-title">
+                    {programName}
+                </h1>
             </div>
         </header>
 
         <div class="form-canvas">
             <template if:true={isLoading}>
                 <div class="spinner-container">
-                    <lightning-spinner alt-text="Loading..." size="large" variant="brand"></lightning-spinner>
+                    <lightning-spinner alt-text="Loading..." size="large" variant="brand">
+                    </lightning-spinner>
                 </div>
             </template>
+
             <template if:true={isSubmitted}>
                 <div class="success-card-wrapper">
                     <div class="success-card">
                         <div class="success-icon-ring">
-                            <lightning-icon icon-name="utility:success" size="large"
-                                class="success-checkmark"></lightning-icon>
+                            <lightning-icon icon-name="utility:success" size="large">
+                            </lightning-icon>
                         </div>
-                        <h2 class="success-title">Thank You!</h2>
-                        <p class="success-message">Your response has been successfully submitted and saved.</p>
+
+                        <h2 class="success-title">
+                            Thank You!
+                        </h2>
+
+                        <p class="success-message">
+                            Your response has been successfully submitted and saved.
+                        </p>
 
                         <lightning-button variant="brand" label="Submit Another Response"
                             title="Submit Another Response" onclick={handleResetForm} class="success-reset-btn">
@@ -41,153 +53,173 @@
             <template if:false={isLoading}>
                 <template if:false={isSubmitted}>
                     <template if:true={pages.length}>
-
                         <div class="progress-wrapper">
                             <lightning-progress-indicator current-step={activePageId} type="base" variant="base">
+
                                 <template for:each={pages} for:item="page">
+
                                     <template if:true={page.isVisible}>
-                                        <lightning-progress-step key={page.id} label={page.name}
-                                            value={page.id}></lightning-progress-step>
+                                        <lightning-progress-step key={page.id} label={page.name} value={page.id}>
+                                        </lightning-progress-step>
                                     </template>
+
                                 </template>
                             </lightning-progress-indicator>
                         </div>
 
                         <template for:each={pages} for:item="page">
+
                             <template if:true={page.isCurrentPage}>
                                 <div key={page.id} class="page-container">
 
                                     <div class="page-content">
-                                        <h2 class="page-title">{page.name}</h2>
+                                        <h2 class="page-title">
+                                            {page.name}
+                                        </h2>
 
-                                        <template for:each={page.sections} for:item="sec">
-                                            <template if:true={sec.isVisible}>
-                                                <div key={sec.id} class="section-block">
+                                        <template for:each={page.sections} for:item="section">
 
-                                                    <template if:true={sec.label}>
+                                            <template if:true={section.isVisible}>
+                                                <div key={section.id} class="section-block">
+
+                                                    <template if:true={section.label}>
                                                         <div class="section-header">
-                                                            <h3 class="section-title">{sec.label}</h3>
+                                                            <h3 class="section-title">
+                                                                {section.label}
+                                                            </h3>
+
                                                             <div class="section-divider"></div>
                                                         </div>
                                                     </template>
 
                                                     <div class="slds-grid slds-wrap slds-gutters question-grid">
-                                                        <template for:each={sec.elements} for:item="elem">
-                                                            <template if:true={elem.isVisible}>
-                                                                <div key={elem.id} class={sec.layoutClass}>
-                                                                    <div class="field-wrapper">
+                                                        <template for:each={section.elements} for:item="element">
 
-                                                                        <template if:true={elem.isText}>
+                                                            <template if:true={element.isVisible}>
+                                                                <div key={element.id} class={section.layoutClass}>
+
+                                                                    <div class="field-wrapper">
+                                                                        <template if:true={element.isText}>
                                                                             <div class="slds-m-bottom_small">
                                                                                 <lightning-input type="text"
-                                                                                    label={elem.label}
-                                                                                    value={elem.value}
-                                                                                    required={elem.required}
-                                                                                    data-id={elem.id}
-                                                                                    onchange={handleChange}></lightning-input>
+                                                                                    label={element.label}
+                                                                                    value={element.value}
+                                                                                    required={element.required}
+                                                                                    data-id={element.id}
+                                                                                    onchange={handleChange}>
+                                                                                </lightning-input>
                                                                             </div>
                                                                         </template>
 
-                                                                        <template if:true={elem.isTextArea}>
+                                                                        <template if:true={element.isTextArea}>
                                                                             <div class="slds-m-bottom_small">
-                                                                                <lightning-textarea label={elem.label}
-                                                                                    data-id={elem.id} value={elem.value}
-                                                                                    required={elem.required}
-                                                                                    onchange={handleChange}></lightning-textarea>
+                                                                                <lightning-textarea
+                                                                                    label={element.label}
+                                                                                    data-id={element.id}
+                                                                                    value={element.value}
+                                                                                    required={element.required}
+                                                                                    onchange={handleChange}>
+                                                                                </lightning-textarea>
                                                                             </div>
                                                                         </template>
 
-                                                                        <template if:true={elem.isPicklist}>
+                                                                        <template if:true={element.isPicklist}>
                                                                             <div class="slds-m-bottom_small">
-                                                                                <lightning-combobox label={elem.label}
-                                                                                    data-id={elem.id} value={elem.value}
-                                                                                    options={elem.options}
-                                                                                    required={elem.required}
-                                                                                    onchange={handleChange}></lightning-combobox>
+                                                                                <lightning-combobox
+                                                                                    label={element.label}
+                                                                                    data-id={element.id}
+                                                                                    value={element.value}
+                                                                                    options={element.options}
+                                                                                    required={element.required}
+                                                                                    onchange={handleChange}>
+                                                                                </lightning-combobox>
                                                                             </div>
                                                                         </template>
 
-                                                                        <template if:true={elem.isDate}>
+                                                                        <template if:true={element.isDate}>
                                                                             <div class="slds-m-bottom_small">
                                                                                 <lightning-input type="date"
-                                                                                    label={elem.label} data-id={elem.id}
-                                                                                    value={elem.value}
-                                                                                    required={elem.required}
-                                                                                    onchange={handleChange}></lightning-input>
+                                                                                    label={element.label}
+                                                                                    data-id={element.id}
+                                                                                    value={element.value}
+                                                                                    required={element.required}
+                                                                                    onchange={handleChange}>
+                                                                                </lightning-input>
                                                                             </div>
                                                                         </template>
 
-                                                                        <template if:true={elem.isCheckbox}>
+                                                                        <template if:true={element.isCheckbox}>
                                                                             <div
                                                                                 class="custom-checkbox slds-m-bottom_small">
                                                                                 <lightning-input type="checkbox"
-                                                                                    label={elem.label} data-id={elem.id}
-                                                                                    checked={elem.value}
-                                                                                    required={elem.required}
-                                                                                    onchange={handleCheckboxChange}></lightning-input>
+                                                                                    label={element.label}
+                                                                                    data-id={element.id}
+                                                                                    checked={element.value}
+                                                                                    required={element.required}
+                                                                                    onchange={handleCheckboxChange}>
+                                                                                </lightning-input>
                                                                             </div>
                                                                         </template>
 
-                                                                        <template if:true={elem.isInfo}>
+                                                                        <template if:true={element.isInfo}>
                                                                             <div
                                                                                 class="info-banner slds-m-bottom_small">
                                                                                 <lightning-formatted-rich-text
-                                                                                    value={elem.helpText}></lightning-formatted-rich-text>
+                                                                                    value={element.helpText}>
+                                                                                </lightning-formatted-rich-text>
                                                                             </div>
                                                                         </template>
 
-                                                                        <template if:true={elem.hasHelpText}>
-                                                                            <template if:false={elem.isInfo}>
+                                                                        <template if:true={element.hasHelpText}>
+                                                                            <template if:false={element.isInfo}>
                                                                                 <div
                                                                                     class="secondary-rich-text slds-m-top_x-small">
                                                                                     <lightning-formatted-rich-text
-                                                                                        value={elem.helpText}></lightning-formatted-rich-text>
+                                                                                        value={element.helpText}>
+                                                                                    </lightning-formatted-rich-text>
                                                                                 </div>
                                                                             </template>
                                                                         </template>
-
                                                                     </div>
                                                                 </div>
                                                             </template>
                                                         </template>
                                                     </div>
-
                                                 </div>
                                             </template>
                                         </template>
-
                                     </div>
 
                                     <div class="form-footer">
                                         <div class="footer-left">
                                             <template if:true={page.hasPrevPage}>
                                                 <lightning-button label="Back" variant="neutral"
-                                                    icon-name="utility:back" onclick={handlePrevious}
-                                                    class="btn-back"></lightning-button>
+                                                    icon-name="utility:back" onclick={handlePrevious}>
+                                                </lightning-button>
                                             </template>
                                         </div>
+
                                         <div class="footer-right">
                                             <template if:true={page.hasNextPage}>
                                                 <lightning-button label="Continue" variant="brand"
                                                     icon-name="utility:forward" icon-position="right"
-                                                    onclick={handleNext} class="btn-next"></lightning-button>
+                                                    onclick={handleNext}>
+                                                </lightning-button>
                                             </template>
+
                                             <template if:false={page.hasNextPage}>
                                                 <lightning-button label="Submit Form" variant="success"
-                                                    icon-name="utility:check" onclick={handleSubmit}
-                                                    class="btn-submit"></lightning-button>
+                                                    icon-name="utility:check" onclick={handleSubmit}>
+                                                </lightning-button>
                                             </template>
                                         </div>
                                     </div>
-
                                 </div>
                             </template>
                         </template>
-
                     </template>
                 </template>
             </template>
-
         </div>
     </div>
 </template>
